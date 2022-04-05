@@ -17,7 +17,7 @@ use vulkano_win::VkSurfaceBuild;
 use vulkano::sync::now;
 
 fn main() {
-    //vulkan setup
+    //vulkan instance setup
     let req_ext = vulkano_win::required_extensions();
     let  dev_ext = DeviceExtensions {
         khr_swapchain: true, ..DeviceExtensions::none() };
@@ -29,6 +29,7 @@ fn main() {
     let builder = WindowBuilder::new();
     let window = builder.build_vk_surface(&event_loop, vkinst.clone()).unwrap();
 
+    //vulkan device setup
     let (physical, queue_fam) = PhysicalDevice::enumerate(&vkinst)
         .filter(|&p| { p.supported_extensions().is_superset_of(&dev_ext) })
         .filter_map( |p|  {
@@ -54,6 +55,7 @@ fn main() {
         .expect("failed dev creation");
     let queue = queues.next().unwrap();
 
+    //vulkan swapchain setup
     let (mut swapchain, images) = {
         let surface_cap = physical.surface_capabilities(&window, Default::default())
             .unwrap();
@@ -67,6 +69,7 @@ fn main() {
             composite_alpha: surface_cap.supported_composite_alpha.iter().next().unwrap(), ..Default::default() }, ).unwrap()
     };
 
+    /* To be removed! This is test data for the triangle. */
     #[repr(C)]
     #[derive(Clone, Copy, Debug, Default, Zeroable, Pod)]
     struct Vertex { position: [f32; 2], }
@@ -100,6 +103,9 @@ fn main() {
     let vs = vs::load(dev.clone()).unwrap();
     let fs = fs::load(dev.clone()).unwrap();
 
+    /* End of remove block. */
+
+    //render pass setup
     let render_pass = vulkano::single_pass_renderpass!( dev.clone(),
                                                         attachments: { color: { load: Clear, store: Store, format: swapchain.image_format(), samples: 1,}},
                                                         pass: { color: [color], depth_stencil: {} }).unwrap();
@@ -118,7 +124,7 @@ fn main() {
     let mut recreate_swapchain = false;
     let mut previous_frame_end = Some(vulkano::sync::now(dev.clone()).boxed());
     
-    //winit event loop.
+    //winit loop
     event_loop.run(move | event, _, control_flow |  {
         *control_flow = ControlFlow::Poll;
         //*control_flow = ControlFlow::Wait;
@@ -141,6 +147,7 @@ fn main() {
                     framebuffers = window_size_dependent_setup(&new_images, render_pass.clone(), &mut viewport);
                     recreate_swapchain = false;
                 }
+                
                 let (image_num, suboptimal, acquire_future) =
                     match acquire_next_image(swapchain.clone(), None) {
                         Ok(r) => r,
@@ -150,6 +157,7 @@ fn main() {
                         }
                         Err(e) => panic!("Failed to acquire next image: {:?}", e),
                     };
+                
                 if suboptimal { recreate_swapchain = true; }
                 let clear_values = vec![ [0.0, 0.0, 1.0, 1.0].into() ];
 
@@ -168,17 +176,9 @@ fn main() {
                     .then_swapchain_present(queue.clone(), swapchain.clone(), image_num).then_signal_fence_and_flush();
 
                 match future {
-                    Ok(future) => {
-                        previous_frame_end = Some(future.boxed());
-                    }
-                    Err(FlushError::OutOfDate) => {
-                        recreate_swapchain = true;
-                        previous_frame_end = Some(vulkano::sync::now(dev.clone()).boxed());
-                    }
-                    Err(e) => {
-                        println!("Failed to flush future: {:?}", e);
-                        previous_frame_end = Some(vulkano::sync::now(dev.clone()).boxed());
-                    }
+                    Ok(future) => { previous_frame_end = Some(future.boxed()); }
+                    Err(FlushError::OutOfDate) => {recreate_swapchain = true; previous_frame_end = Some(vulkano::sync::now(dev.clone()).boxed()); }
+                    Err(e) => { println!("Failed to flush future: {:?}", e); previous_frame_end = Some(vulkano::sync::now(dev.clone()).boxed()); }
                 }
             }
             _ => ()
@@ -190,14 +190,12 @@ fn main() {
 fn window_size_dependent_setup(
     images: &[Arc<SwapchainImage<Window>>],
     render_pass: Arc<RenderPass>,
-    viewport: &mut Viewport,
-) -> Vec<Arc<Framebuffer>> {
+    viewport: &mut Viewport, ) -> Vec<Arc<Framebuffer>> {
+    
     let dimensions = images[0].dimensions().width_height();
     viewport.dimensions = [dimensions[0] as f32, dimensions[1] as f32];
 
-    images
-        .iter()
-        .map(|image| {
+    images.iter().map(|image| {
             let view = ImageView::new_default(image.clone()).unwrap();
             Framebuffer::new(
                 render_pass.clone(),
@@ -205,8 +203,6 @@ fn window_size_dependent_setup(
                     attachments: vec![view],
                     ..Default::default()
                 },
-            )
-            .unwrap()
-        })
-        .collect::<Vec<_>>()
+            ) .unwrap()
+        }) .collect::<Vec<_>>()
 }
