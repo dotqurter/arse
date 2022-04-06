@@ -176,7 +176,7 @@ fn main() {
                     .then_swapchain_present(queue.clone(), swapchain.clone(), image_num).then_signal_fence_and_flush();
 
                 match future {
-                    Ok(future) => { previous_frame_end = Some(future.boxed()); }
+                    Ok(future) => { let _ = future.wait(None); previous_frame_end = Some(future.boxed()); }
                     Err(FlushError::OutOfDate) => {recreate_swapchain = true; previous_frame_end = Some(vulkano::sync::now(dev.clone()).boxed()); }
                     Err(e) => { println!("Failed to flush future: {:?}", e); previous_frame_end = Some(vulkano::sync::now(dev.clone()).boxed()); }
                 }
